@@ -498,6 +498,67 @@ describe('custom store', function() {
           expect(request.customStoreVerifyCalled).to.equal(1);
         });
       }); // that was approved with info
+
+      describe('that has a custom user profile query', function() {
+        var strategy = new OIDCStrategy({
+          issuer: 'https://www.example.com/',
+          authorizationURL: 'https://www.example.com/oauth2/authorize',
+          userInfoURL: 'https://www.example.com/oauth2/userinfo',
+          userProfileQuery: {foo: 'bar'},
+          tokenURL: 'https://www.example.com/oauth2/token',
+          clientID: 'ABC123',
+          clientSecret: 'secret',
+          callbackURL: 'https://www.example.net/auth/example/callback',
+          schema: undefined,
+          store: new CustomStore()
+        },
+        function(iss, sub, profile, accessToken, refreshToken, done) {
+          return done(null, { id: '1234' }, { message: 'Hello' });
+        });
+
+        var userProfileEffectiveUrl;
+        strategy._getOAuth2Client = function(){
+          return {
+            _authorizeUrl: 'https://www.example.com/oauth2/authorize',
+            _accessTokenUrl: 'https://www.example.com/oauth2/token',
+            _clientId: 'ABC123',
+            getOAuthAccessToken: function(code, options, callback) {
+              return callback(null, '2YotnFZFEjr1zCsicMWpAA', 'tGzv3JOkF0XG5Qx2TlKWIA', {
+                token_type: 'example',
+                id_token: buildIdToken()
+              });
+            },
+            _request: function(method, url, headers, post_body, access_token, callback) {
+              userProfileEffectiveUrl = url;
+
+              return callback(null, JSON.stringify({
+                sub: '1234',
+                name: 'john'
+              }));
+            }
+          };
+        };
+
+        before(function(done) {
+          chai.passport.use(strategy)
+            .success(function(u, i) {
+              done();
+            })
+            .req(function(req) {
+              request = req;
+
+              req.url = '/auth/example/callback';
+              req.query = {};
+              req.query.code = 'SplxlOBeZQQYbYS6WxSbIA';
+              req.query.state = 'foos7473';
+            })
+            .authenticate();
+        });
+
+        it('should use the custom user profile query', function() {
+          expect(userProfileEffectiveUrl).to.equal('https://www.example.com/oauth2/userinfo?foo=bar');
+        });
+      }); // that has a schema query parameter override
       
     }); // processing response to authorization request
     
